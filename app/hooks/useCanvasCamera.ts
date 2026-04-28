@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { zoomAtPoint, clampZoom } from "@/app/lib/camera";
 import type { Camera } from "@/app/types/camera";
 import type { Point } from "@/app/types/point";
@@ -9,6 +9,8 @@ type CanvasCameraParams = {
   canvasRef: React.RefObject<HTMLCanvasElement | null>;
 };
 
+type CursorState = "grabbing" | "grab" | "default";
+
 export function useCanvasCamera({ canvasRef }: CanvasCameraParams) {
   const cameraRef = useRef<Camera>({
     x: 0,
@@ -16,9 +18,13 @@ export function useCanvasCamera({ canvasRef }: CanvasCameraParams) {
     zoom: 1,
   });
 
-  const isDraggingRef = useRef(false);
   const lastPointerPositionRef = useRef<Point | null>(null);
-  const isSpaceBarPressedRef = useRef(false);
+  const isDraggingRef = useRef(false);
+  const isSpacePressedRef = useRef(false);
+
+  const isPanModeActive = useRef(false);
+
+  const [cursor, setCursor] = useState<CursorState>("default");
 
   const minZoom = 0.15;
   const maxZoom = 4;
@@ -26,9 +32,10 @@ export function useCanvasCamera({ canvasRef }: CanvasCameraParams) {
   const handlePointerDown = (event: PointerEvent) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
+    if (!isSpacePressedRef.current) return;
 
-    if (!isSpaceBarPressedRef.current) return;
     isDraggingRef.current = true;
+    setCursor("grabbing");
 
     lastPointerPositionRef.current = {
       x: event.clientX,
@@ -61,6 +68,12 @@ export function useCanvasCamera({ canvasRef }: CanvasCameraParams) {
     isDraggingRef.current = false;
     lastPointerPositionRef.current = null;
 
+    if (isSpacePressedRef.current) {
+      setCursor("grab");
+    } else {
+      setCursor("default");
+    }
+
     canvas.releasePointerCapture(event.pointerId);
   };
 
@@ -83,16 +96,29 @@ export function useCanvasCamera({ canvasRef }: CanvasCameraParams) {
   };
 
   const handleKeyDown = (event: KeyboardEvent) => {
-    if (event.code === "Space") {
-      isSpaceBarPressedRef.current = true;
+    if (event.code !== "Space") return;
+
+    event.preventDefault();
+    isSpacePressedRef.current = true;
+
+    if (!isDraggingRef.current) {
+      setCursor("grab");
     }
   };
 
   const handleKeyUp = (event: KeyboardEvent) => {
-    if (event.code === "Space") {
-      isSpaceBarPressedRef.current = false;
+    if (event.code !== "Space") return;
+
+    isSpacePressedRef.current = false;
+
+    if (isDraggingRef.current) {
+      setCursor("grabbing");
+    } else {
+      setCursor("default");
     }
   };
+
+  isPanModeActive.current = isSpacePressedRef.current;
 
   return {
     cameraRef,
@@ -102,5 +128,8 @@ export function useCanvasCamera({ canvasRef }: CanvasCameraParams) {
     handleWheel,
     handleKeyDown,
     handleKeyUp,
+    cursor,
+    isPanModeActive,
+    isDraggingRef,
   };
 }
